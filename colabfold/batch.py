@@ -13,6 +13,7 @@ import zipfile
 from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import pickle
 
 import haiku
 import importlib_metadata
@@ -176,6 +177,7 @@ def predict_structure(
     relaxed_pdb_lines = []
     prediction_times = []
     representations = []
+    prediction_results = []
     seq_len = sum(sequences_lengths)
 
     model_names = []
@@ -265,6 +267,7 @@ def predict_structure(
         if model_type == "AlphaFold2-multimer":
             iptmscore.append(prediction_result["iptm"])
         max_paes.append(prediction_result["max_predicted_aligned_error"].item())
+        prediction_results.append(prediction_result)
         paes_res = []
 
         for i in range(seq_len):
@@ -346,7 +349,7 @@ def predict_structure(
             "model_name": model_names[key],
             "representations": representations[key],
         }
-    return out, model_rank
+    return out, model_rank, prediction_results
 
 
 def parse_fasta(fasta_string: str) -> Tuple[List[str], List[str]]:
@@ -1086,7 +1089,7 @@ def run(
             if sum(query_sequence_len_array) > crop_len:
                 crop_len = math.ceil(sum(query_sequence_len_array) * recompile_padding)
 
-            outs, model_rank = predict_structure(
+            outs, model_rank, predict_results = predict_structure(
                 jobname,
                 result_dir,
                 input_features,
@@ -1105,6 +1108,14 @@ def run(
             # This normally happens on OOM. TODO: Filter for the specific OOM error message
             logger.error(f"Could not predict {jobname}. Not Enough GPU memory? {e}")
             continue
+       
+        with open(str(result_dir.joinpath(jobname + "_results.pkl")), 'wb') as f:
+            pickle.dump(outs, f, protocol=4)
+            print("save the predicted outs to pickle file")
+
+        with open(str(result_dir.joinpath(jobname + "_full_results.pkl")), 'wb') as f:
+            pickle.dump(predict_results, f, protocol=4)
+            print("save the full predicted outs to pickle file")
 
         # Write representations if needed
 
