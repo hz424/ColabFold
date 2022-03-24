@@ -6,6 +6,7 @@ import haiku
 
 from alphafold.model import model, config, data
 from alphafold.model.modules import AlphaFold
+from alphafold.model.modules_multimer import AlphaFold as AlphaFoldMultimer
 
 
 def load_models_and_params(
@@ -32,6 +33,10 @@ def load_models_and_params(
             AlphaFold.__call__, return_representations=True
         )
 
+        AlphaFoldMultimer.__call__ = partialmethod(
+            AlphaFoldMultimer.__call__, return_representations=True
+        )
+
     if not model_order:
         model_order = [3, 4, 5, 1, 2]
 
@@ -53,7 +58,7 @@ def load_models_and_params(
                 model_config.data.eval.num_ensemble = 1
                 model_config.data.common.num_recycle = num_recycle
                 model_config.model.num_recycle = num_recycle
-            elif model_suffix == "_multimer":
+            elif model_suffix.startswith("_multimer"):
                 model_config.model.num_recycle = num_recycle
                 model_config.model.num_ensemble_eval = 1
             model_runner_and_params.append(
@@ -77,7 +82,7 @@ def load_models_and_params(
                     model_config.data.eval.num_ensemble = 1
                     model_config.data.common.num_recycle = num_recycle
                     model_config.model.num_recycle = num_recycle
-                elif model_suffix == "_multimer":
+                elif model_suffix.startswith("_multimer"):
                     model_config.model.num_ensemble_eval = 1
                     model_config.model.num_recycle = num_recycle
                 model_runner = model.RunModel(
