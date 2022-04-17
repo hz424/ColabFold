@@ -669,7 +669,9 @@ def get_msa_and_templates(
     else:
         a3m_lines = None
 
-    if pair_mode == "paired" or pair_mode == "unpaired+paired":
+    if msa_mode != "single_sequence" and (
+        pair_mode == "paired" or pair_mode == "unpaired+paired"
+    ):
         # find paired a3m if not a homooligomers
         if len(query_seqs_unique) > 1:
             paired_a3m_lines = run_mmseqs2(
@@ -838,10 +840,14 @@ def generate_input_feature(
                     sequence, input_msa, template_features[sequence_index]
                 )
                 if is_complex:
-                    all_seq_features = build_multimer_feature(
-                        paired_msa[sequence_index]
-                    )
+                    if paired_msa is None:
+                        input_msa = ">" + str(101 + sequence_index) + "\n" + sequence
+                    else:
+                        input_msa = paired_msa[sequence_index]
+
+                    all_seq_features = build_multimer_feature(input_msa)
                     feature_dict.update(all_seq_features)
+
                 features_for_chain[protein.PDB_CHAIN_IDS[chain_cnt]] = feature_dict
                 chain_cnt += 1
 
@@ -997,6 +1003,7 @@ def run(
     prediction_callback: Callable[[Any, Any, Any, Any], Any] = None,
     save_single_representations: bool = False,
     save_pair_representations: bool = False,
+    training: bool = False,
 ):
     version = importlib_metadata.version("colabfold")
     commit = get_commit()
@@ -1046,6 +1053,7 @@ def run(
         "recompile_padding": recompile_padding,
         "recompile_all_models": recompile_all_models,
         "commit": get_commit(),
+        "is_training": training,
         "version": importlib_metadata.version("colabfold"),
     }
     config_out_file = result_dir.joinpath("config.json")
@@ -1073,6 +1081,7 @@ def run(
         stop_at_score=stop_at_score,
         rank_by=rank_by,
         return_representations=save_representations,
+        training=training,
     )
     if custom_template_path is not None:
         mk_hhsearch_db(custom_template_path)
@@ -1422,6 +1431,12 @@ def main():
         help="saves the pair representation embeddings of all models",
     )
     parser.add_argument(
+        "--training",
+        default=False,
+        action="store_true",
+        help="turn on training mode of the model to activate drop outs",
+    )
+    parser.add_argument(
         "--zip",
         default=False,
         action="store_true",
@@ -1476,6 +1491,7 @@ def main():
         zip_results=args.zip,
         save_single_representations=args.save_single_representations,
         save_pair_representations=args.save_pair_representations,
+        training=args.training,
     )
 
 
