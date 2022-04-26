@@ -223,7 +223,9 @@ def predict_structure(
     rank_by: str = "auto",
     random_seed: int = 0,
     stop_at_score: float = 100,
+    stop_at_score_below: float = 0,
     prediction_callback: Callable[[Any, Any, Any, Any], Any] = None,
+    use_gpu_relax: bool = False,
 ):
     """Predicts structure using AlphaFold for the given sequence."""
 
@@ -354,13 +356,15 @@ def predict_structure(
                 stiffness=10.0,
                 exclude_residues=[],
                 max_outer_iterations=20,
+                use_gpu=use_gpu_relax,
             )
             relaxed_pdb_str, _, _ = amber_relaxer.process(prot=unrelaxed_protein)
             # TODO: Those aren't actually used in batch
             relaxed_pdb_lines.append(relaxed_pdb_str)
         # early stop criteria fulfilled
-        if mean_score > stop_at_score:
+        if mean_score > stop_at_score or mean_score < stop_at_score_below:
             break
+
     # rerank models based on predicted lddt
     if rank_by == "ptmscore":
         model_rank = np.array(ptmscore).argsort()[::-1]
@@ -1004,6 +1008,8 @@ def run(
     save_single_representations: bool = False,
     save_pair_representations: bool = False,
     training: bool = False,
+    use_gpu_relax: bool = False,
+    stop_at_score_below: float = 0,
 ):
     version = importlib_metadata.version("colabfold")
     commit = get_commit()
@@ -1050,6 +1056,7 @@ def run(
         "pair_mode": pair_mode,
         "host_url": host_url,
         "stop_at_score": stop_at_score,
+        "stop_at_score_below": stop_at_score_below,
         "recompile_padding": recompile_padding,
         "recompile_all_models": recompile_all_models,
         "commit": get_commit(),
@@ -1178,7 +1185,9 @@ def run(
                 do_relax=use_amber,
                 rank_by=rank_by,
                 stop_at_score=stop_at_score,
+                stop_at_score_below=stop_at_score_below,
                 prediction_callback=prediction_callback,
+                use_gpu_relax=use_gpu_relax,
             )
         except RuntimeError as e:
             # This normally happens on OOM. TODO: Filter for the specific OOM error message
@@ -1316,6 +1325,13 @@ def main():
         type=float,
         default=100,
     )
+    parser.add_argument(
+        "--stop-at-score-below",
+        help="Stop to compute structures if plddt or ptmscore < threshold. "
+        "This can make colabfold much faster by skipping sequences that do not generate good scores.",
+        type=float,
+        default=0,
+    )
 
     parser.add_argument(
         "--num-recycle",
@@ -1443,6 +1459,12 @@ def main():
         help="zip all results into one <jobname>.result.zip and delete the original files",
     )
     parser.add_argument(
+        "--use-gpu-relax",
+        default=False,
+        action="store_true",
+        help="run amber on GPU instead of CPU",
+    )
+    parser.add_argument(
         "--overwrite-existing-results", default=False, action="store_true"
     )
 
@@ -1492,6 +1514,8 @@ def main():
         save_single_representations=args.save_single_representations,
         save_pair_representations=args.save_pair_representations,
         training=args.training,
+        use_gpu_relax=args.use_gpu_relax,
+        stop_at_score_below=args.stop_at_score_below,
     )
 
 
